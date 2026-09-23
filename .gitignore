@@ -1,0 +1,10 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+*.mp4
+*.avi
+*.mov
+*.mkv
+.DS_Store
