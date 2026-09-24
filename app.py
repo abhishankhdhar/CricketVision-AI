@@ -2,17 +2,27 @@ import tempfile
 import streamlit as st
 
 from core.video_processor import save_uploaded_video, analyze_video
+from core.batting_validator import validate_batting_video
 from analysis.technique_analyzer import analyze_technique
 from analysis.score_calculator import calculate_scores
 from analysis.feedback_generator import generate_feedback
 from ai.gemini_assistant import ask_gemini
 
 
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
 st.set_page_config(
     page_title="AI Cricket Coach",
     page_icon="🏏",
     layout="wide"
 )
+
+
+# ============================================================
+# HEADER
+# ============================================================
 
 st.title("🏏 AI Cricket Coach")
 
@@ -34,6 +44,7 @@ uploaded = st.file_uploader(
 
 if uploaded:
 
+    # Create temporary directory for uploaded video
     temp_dir = tempfile.mkdtemp(
         prefix="cricket_coach_"
     )
@@ -43,45 +54,124 @@ if uploaded:
         temp_dir
     )
 
+    # Display uploaded video
     st.video(video_path)
 
+
+    # ========================================================
+    # ANALYZE BUTTON
+    # ========================================================
 
     if st.button(
         "🔍 Analyze Batting Technique",
         type="primary"
     ):
 
+        # Remove previous analysis before analyzing
+        # a new video.
+        st.session_state.pop("result", None)
+        st.session_state["chat_history"] = []
+
         with st.spinner(
-            "🏏 Analyzing batting technique..."
+            "🏏 Processing video and checking batting action..."
         ):
 
             try:
+
+                # ------------------------------------------------
+                # STEP 1: Extract pose landmarks
+                # ------------------------------------------------
 
                 landmarks = analyze_video(
                     video_path
                 )
 
+
+                # ------------------------------------------------
+                # STEP 2: Validate whether video contains
+                # a batting-like action
+                # ------------------------------------------------
+
+                validation = validate_batting_video(
+                    landmarks
+                )
+
+
+                # ------------------------------------------------
+                # STEP 3: Reject non-batting videos
+                # ------------------------------------------------
+
+                if not validation["is_batting"]:
+
+                    st.error(
+                        "❌ This does not appear to be a "
+                        "cricket batting video."
+                    )
+
+                    st.info(
+                        "Please upload a clear video of a player "
+                        "performing a batting shot."
+                    )
+
+                    # Show useful validation information
+                    st.caption(
+                        f"Validation confidence: "
+                        f"{validation['confidence']}"
+                    )
+
+                    st.stop()
+
+
+                # ------------------------------------------------
+                # STEP 4: Batting video detected
+                # ------------------------------------------------
+
+                st.success(
+                    "✅ Batting action detected. "
+                    "Starting technique analysis..."
+                )
+
+
+                # ------------------------------------------------
+                # STEP 5: Analyze batting technique
+                # ------------------------------------------------
+
                 technique = analyze_technique(
                     landmarks
                 )
 
+
+                # ------------------------------------------------
+                # STEP 6: Calculate technique scores
+                # ------------------------------------------------
+
                 scores = calculate_scores(
                     technique
                 )
+
+
+                # ------------------------------------------------
+                # STEP 7: Generate coaching feedback
+                # ------------------------------------------------
 
                 feedback = generate_feedback(
                     scores
                 )
 
 
+                # ------------------------------------------------
+                # STEP 8: Store analysis result
+                # ------------------------------------------------
+
                 st.session_state["result"] = {
                     "technique": technique,
                     "scores": scores,
                     "feedback": feedback,
+                    "validation": validation,
                 }
 
 
-                # Start a fresh chat after a new analysis
+                # Start a fresh AI chat for the new analysis
                 st.session_state["chat_history"] = []
 
 
@@ -113,6 +203,10 @@ if "result" in st.session_state:
     st.header("📊 Analysis Report")
 
 
+    # --------------------------------------------------------
+    # Technique Scores
+    # --------------------------------------------------------
+
     cols = st.columns(
         len(scores)
     )
@@ -133,6 +227,10 @@ if "result" in st.session_state:
         )
 
 
+    # --------------------------------------------------------
+    # Coaching Feedback
+    # --------------------------------------------------------
+
     st.subheader(
         "📝 Coaching Feedback"
     )
@@ -144,6 +242,10 @@ if "result" in st.session_state:
             f"• {item}"
         )
 
+
+    # --------------------------------------------------------
+    # Technical Measurements
+    # --------------------------------------------------------
 
     st.subheader(
         "🔎 Technical Measurements"
@@ -172,14 +274,18 @@ st.caption(
 )
 
 
-# Create chat history if it doesn't exist
+# ============================================================
+# CREATE CHAT HISTORY
+# ============================================================
 
 if "chat_history" not in st.session_state:
 
     st.session_state["chat_history"] = []
 
 
-# Display previous messages
+# ============================================================
+# DISPLAY PREVIOUS CHAT MESSAGES
+# ============================================================
 
 for message in st.session_state["chat_history"]:
 
@@ -192,7 +298,9 @@ for message in st.session_state["chat_history"]:
         )
 
 
-# Chat input
+# ============================================================
+# CHAT INPUT
+# ============================================================
 
 question = st.chat_input(
     "Ask something like: How can I improve my head stability?"
@@ -235,7 +343,7 @@ if question:
 
 
     # --------------------------------------------------------
-    # OpenRouter
+    # OpenRouter AI Assistant
     # --------------------------------------------------------
 
     try:
@@ -265,7 +373,9 @@ if question:
                 )
 
 
+        # ----------------------------------------------------
         # Save AI response
+        # ----------------------------------------------------
 
         st.session_state["chat_history"].append(
             {
